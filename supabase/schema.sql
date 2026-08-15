@@ -5,7 +5,7 @@
 -- (Dashboard -> SQL Editor -> New query -> Paste -> Run).
 -- ============================================================
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ------------------------------------------------------------
 -- TABELLEN
@@ -17,8 +17,8 @@ create table if not exists rooms (
   host_secret text not null,
   player_count int not null check (player_count between 2 and 6),
   start_stack int not null check (start_stack > 0),
-  small_blind int not null check (small_blind > 0),
-  big_blind int not null check (big_blind > 0),
+  small_blind int not null default 0 check (small_blind >= 0),
+  big_blind int not null default 0 check (big_blind >= 0),
   pot int not null default 0 check (pot >= 0),
   hand_number int not null default 0,
   dealer_seat int not null default 0,
@@ -106,8 +106,8 @@ create or replace function create_room(
   p_host_name text,
   p_player_count int,
   p_start_stack int,
-  p_small_blind int,
-  p_big_blind int
+  p_small_blind int default 0,
+  p_big_blind int default 0
 ) returns table (
   room_id uuid,
   room_code text,
@@ -117,7 +117,7 @@ create or replace function create_room(
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_room_id uuid;
@@ -168,7 +168,7 @@ create or replace function join_room(
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_room rooms%rowtype;
@@ -186,7 +186,7 @@ begin
     raise exception 'Raum nicht gefunden';
   end if;
 
-  select count(*) into v_taken from players where room_id = v_room.id;
+  select count(*) into v_taken from players p where p.room_id = v_room.id;
   if v_taken >= v_room.player_count then
     raise exception 'Raum ist voll';
   end if;
@@ -322,8 +322,9 @@ declare
   v_bb_seat int;
   v_sb_player players%rowtype;
   v_bb_player players%rowtype;
-  v_sb_delta int;
-  v_bb_delta int;
+  v_sb_delta int := 0;
+  v_bb_delta int := 0;
+  v_use_blinds boolean;
 begin
   select * into v_room from rooms where id = p_room_id for update;
   if not found or v_room.host_secret <> p_host_secret then
@@ -333,6 +334,8 @@ begin
   if v_room.hand_active then
     raise exception 'Es läuft bereits eine Hand. Bitte zuerst "Hand beenden".';
   end if;
+
+  v_use_blinds := v_room.small_blind > 0 or v_room.big_blind > 0;
 
   -- alle Spieler mit Chips zurücksetzen
   update players
@@ -360,28 +363,33 @@ begin
     v_dealer_idx := 0;
   end if;
 
-  v_sb_idx := (v_dealer_idx + 1) % v_n;
-  v_bb_idx := (v_dealer_idx + 2) % v_n;
-  v_sb_seat := v_seats[v_sb_idx + 1];
-  v_bb_seat := v_seats[v_bb_idx + 1];
+  if v_use_blinds then
+    v_sb_idx := (v_dealer_idx + 1) % v_n;
+    v_bb_idx := (v_dealer_idx + 2) % v_n;
+    v_sb_seat := v_seats[v_sb_idx + 1];
+    v_bb_seat := v_seats[v_bb_idx + 1];
 
-  select * into v_sb_player from players where room_id = p_room_id and seat = v_sb_seat;
-  select * into v_bb_player from players where room_id = p_room_id and seat = v_bb_seat;
+    select * into v_sb_player from players where room_id = p_room_id and seat = v_sb_seat;
+    select * into v_bb_player from players where room_id = p_room_id and seat = v_bb_seat;
 
-  v_sb_delta := least(v_room.small_blind, v_sb_player.stack);
-  v_bb_delta := least(v_room.big_blind, v_bb_player.stack);
+    v_sb_delta := least(v_room.small_blind, v_sb_player.stack);
+    v_bb_delta := least(v_room.big_blind, v_bb_player.stack);
 
-  update players
-  set stack = stack - v_sb_delta,
-      current_bet = v_sb_delta,
-      status = case when stack - v_sb_delta = 0 then 'allin' else 'active' end
-  where id = v_sb_player.id;
+    update players
+    set stack = stack - v_sb_delta,
+        current_bet = v_sb_delta,
+        status = case when stack - v_sb_delta = 0 then 'allin' else 'active' end
+    where id = v_sb_player.id;
 
-  update players
-  set stack = stack - v_bb_delta,
-      current_bet = v_bb_delta,
-      status = case when stack - v_bb_delta = 0 then 'allin' else 'active' end
-  where id = v_bb_player.id;
+    update players
+    set stack = stack - v_bb_delta,
+        current_bet = v_bb_delta,
+        status = case when stack - v_bb_delta = 0 then 'allin' else 'active' end
+    where id = v_bb_player.id;
+  else
+    v_sb_seat := null;
+    v_bb_seat := null;
+  end if;
 
   update rooms
   set hand_number = hand_number + 1,
@@ -393,8 +401,16 @@ begin
   where id = p_room_id;
 
   insert into history (room_id, hand_number, type, detail)
-  values (p_room_id, v_room.hand_number + 1, 'new_hand',
-    'SB ' || v_sb_player.name || ' (' || v_sb_delta || '), BB ' || v_bb_player.name || ' (' || v_bb_delta || ')');
+  values (
+    p_room_id,
+    v_room.hand_number + 1,
+    'new_hand',
+    case
+      when v_use_blinds then
+        'SB ' || v_sb_player.name || ' (' || v_sb_delta || '), BB ' || v_bb_player.name || ' (' || v_bb_delta || ')'
+      else null
+    end
+  );
 end;
 $$;
 
@@ -554,7 +570,7 @@ begin
     raise exception 'Blinds können nicht während einer laufenden Hand geändert werden';
   end if;
 
-  if p_small_blind <= 0 or p_big_blind <= 0 or p_big_blind < p_small_blind then
+  if p_small_blind < 0 or p_big_blind < 0 or (p_big_blind > 0 and p_big_blind < p_small_blind) then
     raise exception 'Ungültige Blinds';
   end if;
 

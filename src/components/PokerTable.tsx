@@ -37,9 +37,11 @@ export default function PokerTable({ room, players, selfPlayerId }: Props) {
           {room.pot.toLocaleString('de-DE')}
         </span>
         <span className="text-[11px] text-cream/50 font-mono tabular">Pot</span>
-        <span className="mt-1 text-[11px] text-cream/40 font-mono tabular">
-          Blinds {room.small_blind}/{room.big_blind}
-        </span>
+        {room.small_blind > 0 || room.big_blind > 0 ? (
+          <span className="mt-1 text-[11px] text-cream/40 font-mono tabular">
+            Blinds {room.small_blind}/{room.big_blind}
+          </span>
+        ) : null}
         {!room.hand_active && (
           <span className="mt-1 text-[10px] uppercase tracking-wide text-muted">Zwischen den Händen</span>
         )}

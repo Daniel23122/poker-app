@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Player, Room } from '../types'
-import { startNewHand, endHand, rebuyPlayer, removePlayer, updateRoomSettings } from '../lib/api'
+import { startNewHand, endHand, rebuyPlayer, removePlayer } from '../lib/api'
 
 interface Props {
   room: Room
@@ -14,9 +14,6 @@ export default function HostPanel({ room, players, hostSecret }: Props) {
   const [winnerId, setWinnerId] = useState('')
   const [rebuyTarget, setRebuyTarget] = useState('')
   const [rebuyAmount, setRebuyAmount] = useState('500')
-  const [showSettings, setShowSettings] = useState(false)
-  const [sb, setSb] = useState(String(room.small_blind))
-  const [bb, setBb] = useState(String(room.big_blind))
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -34,55 +31,9 @@ export default function HostPanel({ room, players, hostSecret }: Props) {
 
   return (
     <div className="rounded-2xl bg-panel border border-brass/25 p-4 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <span className="font-display font-semibold text-brasslight text-sm uppercase tracking-wide">
-          Host-Steuerung
-        </span>
-        <button
-          onClick={() => setShowSettings((s) => !s)}
-          className="text-xs text-muted hover:text-cream transition-colors"
-        >
-          {showSettings ? 'Schließen' : 'Blinds ändern'}
-        </button>
-      </div>
-
-      {showSettings && (
-        <div className="flex items-end gap-2 bg-ink/60 rounded-xl p-3">
-          <div className="flex-1">
-            <label className="block text-[10px] uppercase text-muted mb-1">Small Blind</label>
-            <input
-              className="w-full rounded-lg bg-ink border border-white/10 px-2 py-2 font-mono tabular text-sm"
-              value={sb}
-              onChange={(e) => setSb(e.target.value)}
-            />
-          </div>
-          <div className="flex-1">
-            <label className="block text-[10px] uppercase text-muted mb-1">Big Blind</label>
-            <input
-              className="w-full rounded-lg bg-ink border border-white/10 px-2 py-2 font-mono tabular text-sm"
-              value={bb}
-              onChange={(e) => setBb(e.target.value)}
-            />
-          </div>
-          <button
-            disabled={busy || room.hand_active}
-            onClick={() =>
-              run(() =>
-                updateRoomSettings({
-                  roomId: room.id,
-                  hostSecret,
-                  smallBlind: Number(sb),
-                  bigBlind: Number(bb),
-                })
-              )
-            }
-            className="rounded-lg bg-brass text-ink text-xs font-semibold px-3 py-2 disabled:opacity-40"
-            title={room.hand_active ? 'Nicht während einer laufenden Hand möglich' : ''}
-          >
-            Speichern
-          </button>
-        </div>
-      )}
+      <span className="font-display font-semibold text-brasslight text-sm uppercase tracking-wide">
+        Host-Steuerung
+      </span>
 
       {!room.hand_active ? (
         <button

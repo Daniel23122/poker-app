@@ -92,8 +92,6 @@ function CreateRoomForm({ onBack, onCreated }: { onBack: () => void; onCreated: 
   const [name, setName] = useState('')
   const [playerCount, setPlayerCount] = useState(6)
   const [startStack, setStartStack] = useState(1000)
-  const [smallBlind, setSmallBlind] = useState(10)
-  const [bigBlind, setBigBlind] = useState(20)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -110,8 +108,8 @@ function CreateRoomForm({ onBack, onCreated }: { onBack: () => void; onCreated: 
         hostName: name.trim(),
         playerCount,
         startStack,
-        smallBlind,
-        bigBlind,
+        smallBlind: 0,
+        bigBlind: 0,
       })
       saveIdentity({
         roomId: result.room_id,
@@ -176,29 +174,6 @@ function CreateRoomForm({ onBack, onCreated }: { onBack: () => void; onCreated: 
             value={startStack}
             onChange={(e) => setStartStack(Number(e.target.value))}
           />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel>Small Blind</FieldLabel>
-            <input
-              className={inputClass}
-              type="number"
-              min={1}
-              value={smallBlind}
-              onChange={(e) => setSmallBlind(Number(e.target.value))}
-            />
-          </div>
-          <div>
-            <FieldLabel>Big Blind</FieldLabel>
-            <input
-              className={inputClass}
-              type="number"
-              min={1}
-              value={bigBlind}
-              onChange={(e) => setBigBlind(Number(e.target.value))}
-            />
-          </div>
         </div>
 
         {error && <p className="text-danger text-sm">{error}</p>}
